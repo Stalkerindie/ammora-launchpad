@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import { FEATURED_LAUNCH } from './lib/ammora'
 import { connectWallet, hasInjectedWallet } from './lib/wallet'
@@ -16,6 +16,9 @@ export default function App() {
   const [connecting, setConnecting] = useState(false)
   const [connectErr, setConnectErr] = useState('')
   const [curve, setCurve] = useState<Address>(FEATURED_LAUNCH.curve)
+  const [walletOpen, setWalletOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const walletRef = useRef<HTMLDivElement>(null)
 
   const doConnect = useCallback(async () => {
     setConnectErr('')
@@ -40,7 +43,19 @@ export default function App() {
     // as connected until revoked inside the wallet.
     setAccount(null)
     setConnectErr('')
+    setWalletOpen(false)
   }, [])
+
+  const doCopy = useCallback(async () => {
+    if (!account) return
+    try {
+      await navigator.clipboard.writeText(account)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
+    }
+  }, [account])
 
   // Follow the wallet: if the user switches or disconnects accounts in
   // MetaMask/Quetta, the header follows without a reload.
@@ -55,6 +70,23 @@ export default function App() {
     eth.on('accountsChanged', onAccountsChanged)
     return () => eth.removeListener?.('accountsChanged', onAccountsChanged)
   }, [])
+
+  // Close the wallet popup on outside tap or Escape.
+  useEffect(() => {
+    if (!walletOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (walletRef.current && !walletRef.current.contains(e.target as Node)) setWalletOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWalletOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [walletOpen])
 
   const goTrade = useCallback((curveAddr: Address) => {
     setCurve(curveAddr)
@@ -71,22 +103,38 @@ export default function App() {
   return (
     <div className="min-h-screen bg-ink text-slate-100">
       <header className="sticky top-0 z-10 border-b border-line bg-ink/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight">
+        <div className="mx-auto flex max-w-5xl flex-nowrap items-center justify-between gap-2 px-4 py-3">
+          <div className="min-w-0 shrink">
+            <h1 className="text-xl font-black tracking-tight sm:text-2xl">
               Giwa<span className="text-accent">Pad</span>
             </h1>
-            <p className="text-xs text-slate-400">Ammora SDK · GIWA Sepolia testnet</p>
+            <p className="hidden text-xs text-slate-400 sm:block">Ammora SDK · GIWA Sepolia testnet</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="relative shrink-0" ref={walletRef}>
             {account ? (
               <>
-                <span className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-xs text-accent">
+                <button
+                  type="button"
+                  onClick={() => setWalletOpen((o) => !o)}
+                  className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-xs text-accent transition hover:bg-accent/20"
+                >
                   {account.slice(0, 6)}…{account.slice(-4)}
-                </span>
-                <Btn variant="ghost" onClick={doDisconnect}>
-                  Disconnect
-                </Btn>
+                </button>
+                {walletOpen && (
+                  <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-line bg-card p-4 shadow-xl shadow-black/50">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallet</p>
+                    <p className="mt-2 break-all font-mono text-xs text-slate-100">{account}</p>
+                    <p className="mt-1 text-xs text-slate-400">GIWA Sepolia · chain 91342</p>
+                    <div className="mt-4 flex gap-2">
+                      <Btn variant="ghost" onClick={doCopy}>
+                        {copied ? 'Copied' : 'Copy address'}
+                      </Btn>
+                      <Btn variant="danger" onClick={doDisconnect}>
+                        Disconnect
+                      </Btn>
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <Btn onClick={doConnect} disabled={connecting}>
