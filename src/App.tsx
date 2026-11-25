@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
 import { FEATURED_LAUNCH } from './lib/ammora'
 import { connectWallet, hasInjectedWallet } from './lib/wallet'
@@ -34,6 +34,28 @@ export default function App() {
     }
   }, [])
 
+  const doDisconnect = useCallback(() => {
+    // Injected providers expose no disconnect RPC: disconnecting means the
+    // app forgets the account. The wallet itself may still list this site
+    // as connected until revoked inside the wallet.
+    setAccount(null)
+    setConnectErr('')
+  }, [])
+
+  // Follow the wallet: if the user switches or disconnects accounts in
+  // MetaMask/Quetta, the header follows without a reload.
+  useEffect(() => {
+    const eth = window.ethereum
+    if (!eth?.on) return
+    const onAccountsChanged = (...args: unknown[]) => {
+      const addrs = args[0] as string[]
+      if (!addrs?.length) setAccount(null)
+      else setAccount(addrs[0] as Address)
+    }
+    eth.on('accountsChanged', onAccountsChanged)
+    return () => eth.removeListener?.('accountsChanged', onAccountsChanged)
+  }, [])
+
   const goTrade = useCallback((curveAddr: Address) => {
     setCurve(curveAddr)
     setTab('trade')
@@ -58,9 +80,14 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             {account ? (
-              <span className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-xs text-accent">
-                {account.slice(0, 6)}…{account.slice(-4)}
-              </span>
+              <>
+                <span className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-xs text-accent">
+                  {account.slice(0, 6)}…{account.slice(-4)}
+                </span>
+                <Btn variant="ghost" onClick={doDisconnect}>
+                  Disconnect
+                </Btn>
+              </>
             ) : (
               <Btn onClick={doConnect} disabled={connecting}>
                 {connecting ? 'Connecting…' : 'Connect Wallet'}
