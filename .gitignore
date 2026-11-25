@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+scripts/lifecycle.ts
+scripts/lifecycle-state.json
