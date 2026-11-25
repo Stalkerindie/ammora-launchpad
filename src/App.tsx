@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
 import { FEATURED_LAUNCH } from './lib/ammora'
 import { connectWallet, hasInjectedWallet } from './lib/wallet'
@@ -17,8 +17,6 @@ export default function App() {
   const [connectErr, setConnectErr] = useState('')
   const [curve, setCurve] = useState<Address>(FEATURED_LAUNCH.curve)
   const [walletOpen, setWalletOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const walletRef = useRef<HTMLDivElement>(null)
 
   const doConnect = useCallback(async () => {
     setConnectErr('')
@@ -46,16 +44,6 @@ export default function App() {
     setWalletOpen(false)
   }, [])
 
-  const doCopy = useCallback(async () => {
-    if (!account) return
-    try {
-      await navigator.clipboard.writeText(account)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      setCopied(false)
-    }
-  }, [account])
 
   // Follow the wallet: if the user switches or disconnects accounts in
   // MetaMask/Quetta, the header follows without a reload.
@@ -71,21 +59,14 @@ export default function App() {
     return () => eth.removeListener?.('accountsChanged', onAccountsChanged)
   }, [])
 
-  // Close the wallet popup on outside tap or Escape.
+  // Close the wallet popup on Escape (taps outside close via the backdrop).
   useEffect(() => {
     if (!walletOpen) return
-    const onDown = (e: MouseEvent) => {
-      if (walletRef.current && !walletRef.current.contains(e.target as Node)) setWalletOpen(false)
-    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setWalletOpen(false)
     }
-    document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => document.removeEventListener('keydown', onKey)
   }, [walletOpen])
 
   const goTrade = useCallback((curveAddr: Address) => {
@@ -110,32 +91,15 @@ export default function App() {
             </h1>
             <p className="hidden text-xs text-slate-400 sm:block">Ammora SDK · GIWA Sepolia testnet</p>
           </div>
-          <div className="relative shrink-0" ref={walletRef}>
+          <div className="shrink-0">
             {account ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setWalletOpen((o) => !o)}
-                  className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-xs text-accent transition hover:bg-accent/20"
-                >
-                  {account.slice(0, 6)}…{account.slice(-4)}
-                </button>
-                {walletOpen && (
-                  <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-line bg-card p-4 shadow-xl shadow-black/50">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallet</p>
-                    <p className="mt-2 break-all font-mono text-xs text-slate-100">{account}</p>
-                    <p className="mt-1 text-xs text-slate-400">GIWA Sepolia · chain 91342</p>
-                    <div className="mt-4 flex gap-2">
-                      <Btn variant="ghost" onClick={doCopy}>
-                        {copied ? 'Copied' : 'Copy address'}
-                      </Btn>
-                      <Btn variant="danger" onClick={doDisconnect}>
-                        Disconnect
-                      </Btn>
-                    </div>
-                  </div>
-                )}
-              </>
+              <button
+                type="button"
+                onClick={() => setWalletOpen((o) => !o)}
+                className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-xs text-accent transition hover:bg-accent/20"
+              >
+                {account.slice(0, 6)}…{account.slice(-4)}
+              </button>
             ) : (
               <Btn onClick={doConnect} disabled={connecting}>
                 {connecting ? 'Connecting…' : 'Connect Wallet'}
@@ -170,6 +134,50 @@ export default function App() {
         {tab === 'trade' && <Trading account={account} curve={curve} onCurveChange={setCurve} />}
         {tab === 'fees' && <Fees account={account} />}
       </main>
+
+      {account && walletOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setWalletOpen(false)} />
+          <div className="relative w-full max-w-sm rounded-3xl border border-line bg-card p-6 shadow-2xl shadow-black/50">
+            <div className="flex items-start justify-between">
+              <span className="rounded-2xl border border-line bg-white/5 p-3 text-slate-200">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                  <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                  <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+                </svg>
+              </span>
+              <button
+                type="button"
+                onClick={() => setWalletOpen(false)}
+                aria-label="Close"
+                className="rounded-xl border border-line bg-white/5 p-2 text-slate-300 transition hover:bg-white/10"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+            <h2 className="mt-5 text-2xl font-bold text-slate-100">Your wallet</h2>
+            <p className="mt-2 break-all font-mono text-sm text-slate-400">{account}</p>
+            <button
+              type="button"
+              onClick={doDisconnect}
+              className="mt-6 w-full rounded-full bg-white py-3.5 text-base font-semibold text-black transition hover:bg-slate-200"
+            >
+              Sign out
+            </button>
+            <button
+              type="button"
+              onClick={() => setWalletOpen(false)}
+              className="mt-2 w-full py-2 text-sm font-medium text-slate-400 transition hover:text-slate-200"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <footer className="border-t border-line py-5">
         <div className="mx-auto max-w-5xl px-4 text-center text-xs text-slate-500">
